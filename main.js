@@ -1,147 +1,27 @@
-const SHA256 = require( 'crypto-js/sha256' );
+const { BlockChain, Transaction } = require( './blockchain' );
+const EC = require( 'elliptic' ).ec;
+const ec = new EC( 'secp256k1' );
 
-class Transaction {
-    constructor( fromAddress, toAddress, amount ) {
-        this.timestamp = Date.now();
-        this.fromAddress = fromAddress;
-        this.toAddress = toAddress;
-        this.amount = amount;
-    }
-}
-
-class Block {
-    constructor( timestamp, transactions, previousHash ) {
-        this.timestamp = timestamp;
-        this.transactions = transactions;
-        this.previousHash = previousHash;
-        this.hash = this.calculateHash();
-        this.nonce = 0;
-    }
-
-    calculateHash() {
-        return SHA256(
-            this.previousHash +
-            this.timestamp +
-            JSON.stringify( this.transactions ) +
-            this.nonce
-        ).toString();
-    }
-
-    mineBlock( difficulty ) {
-        while( this.hash.substring( 0, difficulty ) !== Array( difficulty + 1 ).join( "0" ) ) {
-            ++this.nonce;
-            this.hash = this.calculateHash();
-        }
-        return this;
-    }
-}
-
-class BlockChain {
-
-    constructor() {
-        this.chain = [this.createGenesisBlock()];
-        this.difficulty = 2;
-        this.pendingTransactions = [];
-        this.miningReward = 100;
-    }
-
-    createTransaction( transaction ) {
-        this.pendingTransactions.push( transaction );
-    }
-
-    getBalanceOfAddress( address ) {
-        let balance = 0;
-        for( let block of this.chain ) {
-            for( let transaction of block.transactions ) {
-                if( transaction.fromAddress === address ) {
-                    balance -= transaction.amount;
-                } else if( transaction.toAddress === address ) {
-                    balance += transaction.amount;
-                }
-            }
-        }
-        return balance;
-    }
-
-    minePendingTransactions( miningRewardAddress ) {
-        let block = new Block( Date.now(), this.pendingTransactions).mineBlock( this.difficulty );
-        this.chain.push( block );
-        this.pendingTransactions = [ new Transaction( null, miningRewardAddress, this.miningReward ) ];
-    }
-
-    createGenesisBlock() {
-        return new Block(
-            new Date().getTime(),
-            "GenisisBlock",
-            "0"
-        )
-    }
-
-    getLatestBlock() {
-        return this.chain[ this.chain.length - 1 ];
-    }
-
-    addBlock( newBlockData ) {
-        this.chain.push(
-            new Block(
-                new Date().getTime(),
-                newBlockData,
-                this.getLatestBlock().hash
-            ).mineBlock( this.difficulty )
-        );
-    }
-
-    isChainValid() {
-        for( let i = 1; i < this.chain.length; ++i )
-        {
-            const currentBlock = this.chain[ i ];
-            const prevBlock = this.chain[ i - 1 ];
-
-            if( currentBlock.hash != currentBlock.calculateHash() ) {
-                console.log( "Block " + currentBlock.data + " hash invalid");
-                return false;
-            }
-
-            if( currentBlock.previousHash != prevBlock.hash ) {
-                console.log( "Block " + currentBlock.data + " previous hash does not match");
-                return false;
-            }
-        }
-        return true;
-    }
-
-}
-
+const myPrivateKey = ec.keyFromPrivate( '5eb42d6d36a6926509180d0b035a909a94b8f155d691e2bb4ce9e953d9ff689b' );
+const myWalletAddress = myPrivateKey.getPublic( 'hex' );
 let savjeeCoin = new BlockChain();
 
-savjeeCoin.createTransaction(
-    new Transaction(
-        'a1', 'a2', 100
-    )
-);
-
-savjeeCoin.createTransaction(
-    new Transaction(
-        'a2', 'a1', 50
-    )
-);
-
-savjeeCoin.createTransaction(
-    new Transaction(
-        'a2', 'a1', 25
-    )
-);
+const transaction1 = new Transaction( myWalletAddress, 'otherPublicKey', 100 );
+//transaction1.signTransaction( ec.keyFromPrivate( "7d82d1c71a27741897fe1b6372aefe3b22b8cf400dc664f51b3d116ab7920ec6" ) );
+transaction1.signTransaction( myPrivateKey );
+savjeeCoin.addTransaction( transaction1 );
 
 console.log( "Mining transactions..." );
-savjeeCoin.minePendingTransactions( 'a3' );
+savjeeCoin.minePendingTransactions( myWalletAddress );
 
-console.log( "a1 Balance: ", savjeeCoin.getBalanceOfAddress( 'a1' ) );
-console.log( "a2 Balance: ", savjeeCoin.getBalanceOfAddress( 'a2' ) );
-console.log( "a3 Balance: ", savjeeCoin.getBalanceOfAddress( 'a3' ) );
+console.log( "Balance: " + savjeeCoin.getBalanceOfAddress( myWalletAddress ) );
+console.log( "Other Balance: " + savjeeCoin.getBalanceOfAddress( 'otherPublicKey' ) );
+console.log( "Valid: " + savjeeCoin.isChainValid() );
+console.log();
 
-console.log( "Mining transactions..." );
-savjeeCoin.minePendingTransactions( 'a3' );
-
-console.log( "a1 Balance: ", savjeeCoin.getBalanceOfAddress( 'a1' ) );
-console.log( "a2 Balance: ", savjeeCoin.getBalanceOfAddress( 'a2' ) );
-console.log( "a3 Balance: ", savjeeCoin.getBalanceOfAddress( 'a3' ) );
+savjeeCoin.chain[1].transactions[0].amount = 1;
+savjeeCoin.chain[1].transactions[0].signTransaction( myPrivateKey ); // <- Need myPrivateKey
+savjeeCoin.chain[1].mineBlock( savjeeCoin.difficulty );
+console.log( "Balance: " + savjeeCoin.getBalanceOfAddress( myWalletAddress ) );
+console.log( "Other Balance: " + savjeeCoin.getBalanceOfAddress( 'otherPublicKey' ) );
+console.log( "Valid: " + savjeeCoin.isChainValid() );
